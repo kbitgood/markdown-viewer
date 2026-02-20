@@ -19,6 +19,7 @@ declare module "electrobun/bun" {
     };
     constructor(config: any);
     on(eventName: string, callback: () => void): void;
+    focus(): void;
   }
 
   export const Utils: {

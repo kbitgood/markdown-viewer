@@ -8,6 +8,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   watch,
   writeFileSync
@@ -148,6 +149,31 @@ function normalizeFilePath(inputPath: string): string {
     return decodeURIComponent(url.pathname);
   }
   return isAbsolute(inputPath) ? inputPath : resolve(process.cwd(), inputPath);
+}
+
+function canonicalFilePath(inputPath: string): string {
+  const normalized = normalizeFilePath(inputPath);
+  if (!existsSync(normalized)) {
+    return normalized;
+  }
+  try {
+    return realpathSync(normalized);
+  } catch {
+    return normalized;
+  }
+}
+
+function findOpenWindowByFilePath(filePath: string): WindowContext | null {
+  const target = canonicalFilePath(filePath);
+  for (const ctx of windows) {
+    if (!ctx.filePath) {
+      continue;
+    }
+    if (canonicalFilePath(ctx.filePath) === target) {
+      return ctx;
+    }
+  }
+  return null;
 }
 
 function readMarkdownFile(filePath: string): { content: string; warning: string | null } {
@@ -445,7 +471,7 @@ function createViewerWindow(initialPath?: string): WindowContext {
             });
             return;
           }
-          createViewerWindow(filePath);
+          openPathInExistingOrNewWindow(filePath);
         },
         openExternalLink: ({ href }: { href: string }) => {
           const opened = Utils.openExternal(href);
@@ -502,7 +528,13 @@ function createViewerWindow(initialPath?: string): WindowContext {
 }
 
 function openPathInExistingOrNewWindow(filePath: string): void {
-  const normalized = normalizeFilePath(filePath);
+  const normalized = canonicalFilePath(filePath);
+  const existing = findOpenWindowByFilePath(normalized);
+  if (existing) {
+    activeContext = existing;
+    existing.window.focus();
+    return;
+  }
   const reusable = [...windows].find((ctx) => !ctx.filePath);
   if (reusable) {
     reusable.filePath = normalized;
