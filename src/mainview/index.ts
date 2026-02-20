@@ -211,18 +211,44 @@ function bindUiControls(): void {
   });
 }
 
+function splitFrontMatter(raw: string): { frontMatter: string | null; markdownBody: string } {
+  const normalized = raw.replaceAll("\r\n", "\n");
+  if (!(normalized.startsWith("---\n") || normalized.startsWith("+++\n"))) {
+    return { frontMatter: null, markdownBody: raw };
+  }
+
+  const delimiter = normalized.startsWith("---\n") ? "---" : "+++";
+  const endToken = `\n${delimiter}\n`;
+  const endIndex = normalized.indexOf(endToken, delimiter.length + 1);
+
+  if (endIndex === -1) {
+    return { frontMatter: null, markdownBody: raw };
+  }
+
+  const frontMatter = normalized.slice(delimiter.length + 1, endIndex).trim();
+  const markdownBody = normalized.slice(endIndex + endToken.length);
+  return { frontMatter, markdownBody };
+}
+
 function render(): void {
   clearWarning();
 
-  const rendered = md.render(appState.content || "# Empty file\n\nThis file has no markdown content.");
+  const content = appState.content || "# Empty file\n\nThis file has no markdown content.";
+  const { frontMatter, markdownBody } = splitFrontMatter(content);
+  const rendered = md.render(markdownBody || "# Empty file\n\nThis file has no markdown content.");
   const safeHtml = purifier.sanitize(rendered, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "script", "iframe"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|file):|\/|\.|#)/i
   });
 
-  elements.preview.innerHTML = safeHtml;
-  buildOutline(elements.preview);
+  const frontMatterHtml = frontMatter
+    ? `<section class="front-matter"><h2>Front Matter</h2><pre>${escapeHtml(frontMatter)}</pre></section>`
+    : "";
+  elements.preview.innerHTML = `${frontMatterHtml}<section class="md-body">${safeHtml}</section>`;
+
+  const bodyRoot = (elements.preview.querySelector(".md-body") as HTMLElement) ?? elements.preview;
+  buildOutline(bodyRoot);
   bindPreviewLinks();
 }
 

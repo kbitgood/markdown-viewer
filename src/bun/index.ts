@@ -49,6 +49,8 @@ const windows = new Set<WindowContext>();
 let activeContext: WindowContext | null = null;
 let settingsWindow: BrowserWindow<any> | null = null;
 let globalConfig = loadConfig().config;
+let startupWindowTimer: ReturnType<typeof setTimeout> | null = null;
+let handledStartupFileOpen = false;
 
 function ensureConfigDir(): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
@@ -501,16 +503,39 @@ function createViewerWindow(initialPath?: string): WindowContext {
   return context;
 }
 
+function openPathInExistingOrNewWindow(filePath: string): void {
+  const normalized = normalizeFilePath(filePath);
+  const reusable = [...windows].find((ctx) => !ctx.filePath);
+  if (reusable) {
+    reusable.filePath = normalized;
+    activeContext = reusable;
+    setWatcher(reusable);
+    sendUpdate(reusable);
+    return;
+  }
+  createViewerWindow(normalized);
+}
+
 function maybeHandleOpenUrl(url: string): void {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "file:") {
-      createViewerWindow(decodeURIComponent(parsed.pathname));
+      handledStartupFileOpen = true;
+      if (startupWindowTimer) {
+        clearTimeout(startupWindowTimer);
+        startupWindowTimer = null;
+      }
+      openPathInExistingOrNewWindow(decodeURIComponent(parsed.pathname));
       return;
     }
 
     if (parsed.protocol === "markdownviewer:" && parsed.searchParams.has("path")) {
-      createViewerWindow(parsed.searchParams.get("path") ?? undefined);
+      handledStartupFileOpen = true;
+      if (startupWindowTimer) {
+        clearTimeout(startupWindowTimer);
+        startupWindowTimer = null;
+      }
+      openPathInExistingOrNewWindow(parsed.searchParams.get("path") ?? "");
     }
   } catch {
     // ignore malformed URLs
@@ -523,4 +548,14 @@ Electrobun.events.on("open-url", (event) => {
   maybeHandleOpenUrl(event.data.url);
 });
 
-createViewerWindow();
+const argvPath = pickInitialFilePath();
+if (argvPath) {
+  handledStartupFileOpen = true;
+  createViewerWindow(argvPath);
+} else {
+  startupWindowTimer = setTimeout(() => {
+    if (!handledStartupFileOpen && windows.size === 0) {
+      createViewerWindow();
+    }
+  }, 320);
+}
