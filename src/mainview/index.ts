@@ -230,6 +230,52 @@ function splitFrontMatter(raw: string): { frontMatter: string | null; markdownBo
   return { frontMatter, markdownBody };
 }
 
+type FrontMatterRow = {
+  key: string;
+  value: string;
+  level: number;
+};
+
+function parseFrontMatterRows(frontMatter: string): FrontMatterRow[] {
+  const rows: FrontMatterRow[] = [];
+  for (const line of frontMatter.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    const indent = (line.match(/^(\s*)/)?.[1].length ?? 0);
+    const level = Math.floor(indent / 2);
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("- ")) {
+      rows.push({ key: "item", value: trimmed.slice(2).trim(), level });
+      continue;
+    }
+
+    const colon = trimmed.indexOf(":");
+    if (colon === -1) {
+      rows.push({ key: "value", value: trimmed, level });
+      continue;
+    }
+
+    const key = trimmed.slice(0, colon).trim();
+    const value = trimmed.slice(colon + 1).trim() || " ";
+    rows.push({ key, value, level });
+  }
+  return rows;
+}
+
+function renderFrontMatterPane(frontMatter: string): string {
+  const rows = parseFrontMatterRows(frontMatter);
+  const items = rows
+    .map((row) => {
+      return `<div class="fm-row" style="--level:${row.level}"><span class="fm-key">${escapeHtml(row.key)}</span><span class="fm-value">${escapeHtml(row.value)}</span></div>`;
+    })
+    .join("");
+
+  return `<section class="front-matter-pane"><div class="fm-head">Front Matter</div><div class="fm-grid">${items}</div></section>`;
+}
+
 function render(): void {
   clearWarning();
 
@@ -239,12 +285,11 @@ function render(): void {
   const safeHtml = purifier.sanitize(rendered, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "script", "iframe"],
+    ADD_ATTR: ["type", "checked", "disabled", "class", "id", "href", "src"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|file):|\/|\.|#)/i
   });
 
-  const frontMatterHtml = frontMatter
-    ? `<section class="front-matter"><h2>Front Matter</h2><pre>${escapeHtml(frontMatter)}</pre></section>`
-    : "";
+  const frontMatterHtml = frontMatter ? renderFrontMatterPane(frontMatter) : "";
   elements.preview.innerHTML = `${frontMatterHtml}<section class="md-body">${safeHtml}</section>`;
 
   const bodyRoot = (elements.preview.querySelector(".md-body") as HTMLElement) ?? elements.preview;

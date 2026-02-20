@@ -445,9 +445,7 @@ function createViewerWindow(initialPath?: string): WindowContext {
             });
             return;
           }
-          context.filePath = filePath;
-          setWatcher(context);
-          sendUpdate(context);
+          createViewerWindow(filePath);
         },
         openExternalLink: ({ href }: { href: string }) => {
           const opened = Utils.openExternal(href);
