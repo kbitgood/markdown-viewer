@@ -5,6 +5,7 @@ export type ViewerConfig = {
   openExternalLinksInBrowser: boolean;
   openLocalLinksInApp: boolean;
   zoomPercent: number;
+  editorAppPath: string;
   sourceVisibleByDefault: boolean;
   showOutlineByDefault: boolean;
 };
@@ -24,6 +25,7 @@ export type MainViewerRPC = {
       pickAndOpenFile: { params: {}; response: void };
       reloadCurrentFile: { params: {}; response: void };
       openSourceWindow: { params: {}; response: void };
+      openInEditor: { params: {}; response: void };
       openLocalLink: { params: { href: string; fromFilePath: string | null }; response: void };
       openExternalLink: { params: { href: string }; response: void };
     };

@@ -67,6 +67,7 @@ const defaultConfig: ViewerConfig = {
   openExternalLinksInBrowser: true,
   openLocalLinksInApp: true,
   zoomPercent: 100,
+  editorAppPath: "/Applications/IntelliJ IDEA.app",
   sourceVisibleByDefault: false,
   showOutlineByDefault: true
 };
@@ -151,6 +152,7 @@ function toBoolean(value: unknown, fallback: boolean, warnings: string[], key: s
 function sanitizeConfig(raw: unknown): { config: ViewerConfig; warning: string | null } {
   const warnings: string[] = [];
   const input = typeof raw === "object" && raw ? (raw as Record<string, unknown>) : {};
+  const editorPath = typeof input["editorAppPath"] === "string" ? input["editorAppPath"].trim() : "";
 
   const config: ViewerConfig = {
     refreshDebounceMs: clampNumber(
@@ -181,6 +183,7 @@ function sanitizeConfig(raw: unknown): { config: ViewerConfig; warning: string |
       warnings,
       "zoomPercent"
     ),
+    editorAppPath: editorPath || defaultConfig.editorAppPath,
     sourceVisibleByDefault: false,
     showOutlineByDefault: toBoolean(
       input["showOutlineByDefault"],
@@ -517,6 +520,32 @@ function openSourceWindow(context: WindowContext): void {
   });
 }
 
+function openCurrentFileInEditor(context: WindowContext): void {
+  if (!context.filePath) {
+    context.window.webview.rpc?.send.warning({ message: "No file is open." });
+    return;
+  }
+
+  const editorApp = context.config.editorAppPath?.trim() || defaultConfig.editorAppPath;
+  if (process.platform === "darwin") {
+    const proc = Bun.spawnSync({
+      cmd: ["open", "-a", editorApp, context.filePath],
+      stdout: "ignore",
+      stderr: "ignore"
+    });
+    if (proc.exitCode === 0) {
+      return;
+    }
+  }
+
+  const opened = Utils.openPath(context.filePath);
+  if (!opened) {
+    context.window.webview.rpc?.send.warning({
+      message: `Failed to open file in editor: ${context.filePath}`
+    });
+  }
+}
+
 function openSettingsWindow(): void {
   if (settingsWindow) {
     settingsWindow.focus();
@@ -676,6 +705,9 @@ function createViewerWindow(initialPath?: string): WindowContext {
         },
         openSourceWindow: () => {
           openSourceWindow(context);
+        },
+        openInEditor: () => {
+          openCurrentFileInEditor(context);
         },
         openLocalLink: ({ href, fromFilePath }: { href: string; fromFilePath: string | null }) => {
           const filePath = resolveLinkedFile(href, fromFilePath);

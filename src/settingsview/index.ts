@@ -21,18 +21,41 @@ new Electrobun.Electroview({ rpc });
 const form = document.getElementById("settingsForm") as HTMLFormElement;
 const refreshDebounce = document.getElementById("refreshDebounce") as HTMLInputElement;
 const zoomPercent = document.getElementById("zoomPercent") as HTMLInputElement;
+const editorPreset = document.getElementById("editorPreset") as HTMLSelectElement;
+const editorCustomPathWrap = document.getElementById("editorCustomPathWrap") as HTMLElement;
+const editorCustomPath = document.getElementById("editorCustomPath") as HTMLInputElement;
 const openExternalLinks = document.getElementById("openExternalLinks") as HTMLInputElement;
 const openLocalLinks = document.getElementById("openLocalLinks") as HTMLInputElement;
 const showOutline = document.getElementById("showOutline") as HTMLInputElement;
 const status = document.getElementById("status") as HTMLParagraphElement;
 
+const knownEditorApps = new Set([
+  "/Applications/IntelliJ IDEA.app",
+  "/Applications/WebStorm.app",
+  "/Applications/Visual Studio Code.app",
+  "/Applications/Cursor.app"
+]);
+
 function setStatus(message: string): void {
   status.textContent = message;
+}
+
+function syncEditorCustomVisibility(): void {
+  const custom = editorPreset.value === "custom";
+  editorCustomPathWrap.style.display = custom ? "grid" : "none";
 }
 
 function applyConfig(config: ViewerConfig): void {
   refreshDebounce.value = String(config.refreshDebounceMs);
   zoomPercent.value = String(config.zoomPercent);
+  if (knownEditorApps.has(config.editorAppPath)) {
+    editorPreset.value = config.editorAppPath;
+    editorCustomPath.value = config.editorAppPath;
+  } else {
+    editorPreset.value = "custom";
+    editorCustomPath.value = config.editorAppPath;
+  }
+  syncEditorCustomVisibility();
   openExternalLinks.checked = config.openExternalLinksInBrowser;
   openLocalLinks.checked = config.openLocalLinksInApp;
   showOutline.checked = config.showOutlineByDefault;
@@ -49,6 +72,8 @@ form.addEventListener("submit", async (event) => {
   const payload: ViewerConfig = {
     refreshDebounceMs: Number(refreshDebounce.value),
     zoomPercent: Number(zoomPercent.value),
+    editorAppPath:
+      editorPreset.value === "custom" ? editorCustomPath.value.trim() : editorPreset.value,
     openExternalLinksInBrowser: openExternalLinks.checked,
     openLocalLinksInApp: openLocalLinks.checked,
     showOutlineByDefault: showOutline.checked,
@@ -57,6 +82,13 @@ form.addEventListener("submit", async (event) => {
 
   await rpc.request.saveSettings(payload);
   setStatus("Saved");
+});
+
+editorPreset.addEventListener("change", () => {
+  if (editorPreset.value !== "custom") {
+    editorCustomPath.value = editorPreset.value;
+  }
+  syncEditorCustomVisibility();
 });
 
 if (document.readyState === "loading") {

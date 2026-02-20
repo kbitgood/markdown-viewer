@@ -78,6 +78,7 @@ const appState: {
     openExternalLinksInBrowser: true,
     openLocalLinksInApp: true,
     zoomPercent: 100,
+    editorAppPath: "/Applications/IntelliJ IDEA.app",
     sourceVisibleByDefault: false,
     showOutlineByDefault: true
   }
@@ -89,6 +90,7 @@ const elements = {
   outlinePanel: document.getElementById("outlinePanel") as HTMLElement,
   mainPanel: document.querySelector(".main-panel") as HTMLElement,
   warningBanner: document.getElementById("warningBanner") as HTMLElement,
+  openInEditorBtn: document.getElementById("openInEditorBtn") as HTMLButtonElement,
   collapseSidebarBtn: document.getElementById("collapseSidebarBtn") as HTMLButtonElement,
   sourceBtn: document.getElementById("sourceBtn") as HTMLButtonElement
 };
@@ -211,6 +213,10 @@ function applyConfig(config: ViewerConfig): void {
 }
 
 function bindUiControls(): void {
+  elements.openInEditorBtn.addEventListener("click", async () => {
+    await rpc.request.openInEditor({});
+  });
+
   elements.collapseSidebarBtn.addEventListener("click", () => {
     elements.outlinePanel.classList.toggle("collapsed");
   });

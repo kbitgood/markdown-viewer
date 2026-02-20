@@ -20,6 +20,22 @@
           <input id="zoomPercent" type="number" min="50" max="200" step="5" />
         </label>
 
+        <label>
+          Editor app
+          <select id="editorPreset">
+            <option value="/Applications/IntelliJ IDEA.app">IntelliJ IDEA</option>
+            <option value="/Applications/WebStorm.app">WebStorm</option>
+            <option value="/Applications/Visual Studio Code.app">Visual Studio Code</option>
+            <option value="/Applications/Cursor.app">Cursor</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+
+        <label id="editorCustomPathWrap">
+          Custom editor app path
+          <input id="editorCustomPath" type="text" placeholder="/Applications/MyEditor.app" />
+        </label>
+
         <label class="check">
           <input id="openExternalLinks" type="checkbox" />
           Open web links in default browser
