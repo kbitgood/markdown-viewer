@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdown Viewer</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="toolbar">
+        <div class="brand-wrap">
+          <span class="brand-mark"></span>
+          <div>
+            <h1>Markdown Viewer</h1>
+            <p id="filePathLabel">No file loaded</p>
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="openFileBtn" class="btn ghost">Open File</button>
+          <button id="refreshBtn" class="btn ghost">Refresh</button>
+          <button id="sourceToggleBtn" class="btn">Source</button>
+          <button id="outlineToggleBtn" class="btn">Outline</button>
+          <button id="settingsToggleBtn" class="btn">Settings</button>
+        </div>
+      </header>
+
+      <div id="statusBar" class="status-bar">
+        <span id="statusPill" class="status-pill">Ready</span>
+        <span id="statusText">Waiting for file changes</span>
+      </div>
+
+      <main class="workspace">
+        <aside id="outlinePanel" class="outline-panel">
+          <h2>Outline</h2>
+          <nav id="outlineNav"></nav>
+        </aside>
+
+        <section class="main-panel">
+          <div id="warningBanner" class="warning hidden"></div>
+
+          <section id="settingsPanel" class="settings-panel hidden">
+            <h2>Settings</h2>
+            <div class="settings-grid">
+              <label>
+                Refresh debounce (ms)
+                <input id="refreshDebounceInput" type="number" min="50" max="5000" step="50" />
+              </label>
+              <label>
+                Zoom (%)
+                <input id="zoomInput" type="number" min="50" max="200" step="5" />
+              </label>
+              <label class="checkbox-line">
+                <input id="externalLinksInput" type="checkbox" />
+                Open web links in browser
+              </label>
+              <label class="checkbox-line">
+                <input id="localLinksInput" type="checkbox" />
+                Open local links in app
+              </label>
+            </div>
+            <p class="settings-note">Settings persist in <code>~/.config/markdown-viewer/config.json</code>.</p>
+          </section>
+
+          <section id="sourcePanel" class="source-panel hidden">
+            <h2>Source</h2>
+            <pre id="sourceContent"></pre>
+          </section>
+
+          <article id="preview" class="preview"></article>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="index.js"></script>
+  </body>
+</html>

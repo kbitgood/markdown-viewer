@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "electrobun": ["src/types/electrobun-shim.d.ts"],
+      "electrobun/bun": ["src/types/electrobun-bun-shim.d.ts"],
+      "electrobun/view": ["src/types/electrobun-view-shim.d.ts"]
+    }
+  }
+}

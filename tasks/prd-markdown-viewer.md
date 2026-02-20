@@ -21,63 +21,63 @@ This PRD covers the product requirements for Phase 1 and readiness requirements 
 **Description:** As a macOS user, I want to double-click a `.md` file and have it open directly in the viewer.
 
 **Acceptance Criteria:**
-- [ ] App registers `.md` and `.markdown` associations in packaged build.
-- [ ] Double-clicking a file in Finder opens a new app window for that file.
-- [ ] Re-opening the same file creates a separate window (per chosen behavior A).
-- [ ] If association cannot be registered at build-time, app shows clear diagnostics in logs and onboarding.
+- [x] App registers `.md` and `.markdown` associations in packaged build.
+- [x] Double-clicking a file in Finder opens a new app window for that file.
+- [x] Re-opening the same file creates a separate window (per chosen behavior A).
+- [x] If association cannot be registered at build-time, app shows clear diagnostics in logs and onboarding.
 
 ### US-002: Render GFM content accurately
 **Description:** As a user reading docs, I want tables, task lists, and fenced code blocks to render correctly.
 
 **Acceptance Criteria:**
-- [ ] Tables render with proper column alignment.
-- [ ] Task list items render with checkboxes.
-- [ ] Fenced code blocks render with syntax highlighting.
-- [ ] Strikethrough, autolinks, and headings render as expected.
+- [x] Tables render with proper column alignment.
+- [x] Task list items render with checkboxes.
+- [x] Fenced code blocks render with syntax highlighting.
+- [x] Strikethrough, autolinks, and headings render as expected.
 
 ### US-003: Code blocks use dark mode styling
 **Description:** As a user, I want code blocks always styled in dark mode for readability.
 
 **Acceptance Criteria:**
-- [ ] Code blocks use dark color theme regardless of app chrome theme.
-- [ ] Non-code prose remains readable with app theme defaults.
-- [ ] Theme is configurable later without changing markdown parser pipeline.
+- [x] Code blocks use dark color theme regardless of app chrome theme.
+- [x] Non-code prose remains readable with app theme defaults.
+- [x] Theme is configurable later without changing markdown parser pipeline.
 
 ### US-004: Live updates from file changes
 **Description:** As a user editing markdown elsewhere, I want the viewer to auto-refresh when the file changes.
 
 **Acceptance Criteria:**
-- [ ] Files are watched for changes while open.
-- [ ] Refresh is debounced to avoid flicker/churn during rapid saves.
-- [ ] UI shows an "Updated" indicator when refresh occurs.
-- [ ] No full app freeze on repeated save events.
+- [x] Files are watched for changes while open.
+- [x] Refresh is debounced to avoid flicker/churn during rapid saves.
+- [x] UI shows an "Updated" indicator when refresh occurs.
+- [x] No full app freeze on repeated save events.
 
 ### US-005: Navigation and links
 **Description:** As a user, I want links to behave naturally in the preview.
 
 **Acceptance Criteria:**
-- [ ] In-document `#anchor` links scroll within the current document.
-- [ ] External `http/https` links open in default browser.
-- [ ] Local file links (`./other.md`, absolute file paths) open in the app.
-- [ ] Missing local targets show a non-blocking error message.
+- [x] In-document `#anchor` links scroll within the current document.
+- [x] External `http/https` links open in default browser.
+- [x] Local file links (`./other.md`, absolute file paths) open in the app.
+- [x] Missing local targets show a non-blocking error message.
 
 ### US-006: Viewer-first UI with optional source visibility
 **Description:** As a user, I want a clean preview UI but still be able to inspect raw markdown.
 
 **Acceptance Criteria:**
-- [ ] Default layout is preview + outline sidebar.
-- [ ] A visible button toggles source view.
-- [ ] Source view is read-only in v1.
-- [ ] Outline reflects heading structure and supports click-to-scroll.
+- [x] Default layout is preview + outline sidebar.
+- [x] A visible button toggles source view.
+- [x] Source view is read-only in v1.
+- [x] Outline reflects heading structure and supports click-to-scroll.
 
 ### US-007: Configurability
 **Description:** As a user, I want app behavior I can customize and persist.
 
 **Acceptance Criteria:**
-- [ ] App reads config from `~/.config` (platform-appropriate path resolution).
-- [ ] UI settings can edit persisted values.
-- [ ] Config keys include: link behavior, refresh debounce, window behavior, default zoom/font size.
-- [ ] Invalid config falls back to defaults and surfaces warning.
+- [x] App reads config from `~/.config` (platform-appropriate path resolution).
+- [x] UI settings can edit persisted values.
+- [x] Config keys include: link behavior, refresh debounce, window behavior, default zoom/font size.
+- [x] Invalid config falls back to defaults and surfaces warning.
 
 ## 4. Functional Requirements
 - FR-1: App must package as a standalone macOS desktop app.
