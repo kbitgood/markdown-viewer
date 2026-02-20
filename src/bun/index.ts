@@ -13,8 +13,8 @@ import {
   watch,
   writeFileSync
 } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type { FSWatcher } from "node:fs";
 import type {
   MainViewerRPC,
@@ -27,7 +27,40 @@ import type {
 const APP_NAME = "Markdown Viewer";
 const CONFIG_DIR = join(homedir(), ".config", "markdown-viewer");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+const STATE_PATH = join(CONFIG_DIR, "state.json");
+
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
+const RECENTS_LIMIT = 15;
+const REFRESH_VISUAL_DELAY_MS = 140;
+const WINDOW_OFFSET = 28;
+
+const DEFAULT_FRAME = {
+  x: 120,
+  y: 80,
+  width: 1360,
+  height: 900
+};
+
+type WindowFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type AppState = {
+  recentFiles: string[];
+  lastWindowFrame: WindowFrame | null;
+};
+
+type WindowContext = {
+  window: BrowserWindow<any>;
+  watcher: FSWatcher | null;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  filePath: string | null;
+  config: ViewerConfig;
+  frame: WindowFrame;
+};
 
 const defaultConfig: ViewerConfig = {
   refreshDebounceMs: 220,
@@ -38,23 +71,54 @@ const defaultConfig: ViewerConfig = {
   showOutlineByDefault: true
 };
 
-type WindowContext = {
-  window: BrowserWindow<any>;
-  watcher: FSWatcher | null;
-  debounceTimer: ReturnType<typeof setTimeout> | null;
-  filePath: string | null;
-  config: ViewerConfig;
-};
-
 const windows = new Set<WindowContext>();
 let activeContext: WindowContext | null = null;
 let settingsWindow: BrowserWindow<any> | null = null;
 let globalConfig = loadConfig().config;
+let appState = loadAppState();
 let startupWindowTimer: ReturnType<typeof setTimeout> | null = null;
 let handledStartupFileOpen = false;
 
 function ensureConfigDir(): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
+}
+
+function loadAppState(): AppState {
+  try {
+    ensureConfigDir();
+    if (!existsSync(STATE_PATH)) {
+      const initial: AppState = { recentFiles: [], lastWindowFrame: null };
+      saveAppState(initial);
+      return initial;
+    }
+
+    const raw = JSON.parse(readFileSync(STATE_PATH, "utf8")) as Partial<AppState>;
+    return {
+      recentFiles: Array.isArray(raw.recentFiles)
+        ? raw.recentFiles.filter((v): v is string => typeof v === "string")
+        : [],
+      lastWindowFrame:
+        raw.lastWindowFrame &&
+        typeof raw.lastWindowFrame.x === "number" &&
+        typeof raw.lastWindowFrame.y === "number" &&
+        typeof raw.lastWindowFrame.width === "number" &&
+        typeof raw.lastWindowFrame.height === "number"
+          ? {
+              x: raw.lastWindowFrame.x,
+              y: raw.lastWindowFrame.y,
+              width: raw.lastWindowFrame.width,
+              height: raw.lastWindowFrame.height
+            }
+          : null
+    };
+  } catch {
+    return { recentFiles: [], lastWindowFrame: null };
+  }
+}
+
+function saveAppState(state: AppState): void {
+  ensureConfigDir();
+  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf8");
 }
 
 function clampNumber(
@@ -89,12 +153,41 @@ function sanitizeConfig(raw: unknown): { config: ViewerConfig; warning: string |
   const input = typeof raw === "object" && raw ? (raw as Record<string, unknown>) : {};
 
   const config: ViewerConfig = {
-    refreshDebounceMs: clampNumber(input["refreshDebounceMs"], 50, 5000, defaultConfig.refreshDebounceMs, warnings, "refreshDebounceMs"),
-    openExternalLinksInBrowser: toBoolean(input["openExternalLinksInBrowser"], defaultConfig.openExternalLinksInBrowser, warnings, "openExternalLinksInBrowser"),
-    openLocalLinksInApp: toBoolean(input["openLocalLinksInApp"], defaultConfig.openLocalLinksInApp, warnings, "openLocalLinksInApp"),
-    zoomPercent: clampNumber(input["zoomPercent"], 50, 200, defaultConfig.zoomPercent, warnings, "zoomPercent"),
+    refreshDebounceMs: clampNumber(
+      input["refreshDebounceMs"],
+      50,
+      5000,
+      defaultConfig.refreshDebounceMs,
+      warnings,
+      "refreshDebounceMs"
+    ),
+    openExternalLinksInBrowser: toBoolean(
+      input["openExternalLinksInBrowser"],
+      defaultConfig.openExternalLinksInBrowser,
+      warnings,
+      "openExternalLinksInBrowser"
+    ),
+    openLocalLinksInApp: toBoolean(
+      input["openLocalLinksInApp"],
+      defaultConfig.openLocalLinksInApp,
+      warnings,
+      "openLocalLinksInApp"
+    ),
+    zoomPercent: clampNumber(
+      input["zoomPercent"],
+      50,
+      200,
+      defaultConfig.zoomPercent,
+      warnings,
+      "zoomPercent"
+    ),
     sourceVisibleByDefault: false,
-    showOutlineByDefault: toBoolean(input["showOutlineByDefault"], defaultConfig.showOutlineByDefault, warnings, "showOutlineByDefault")
+    showOutlineByDefault: toBoolean(
+      input["showOutlineByDefault"],
+      defaultConfig.showOutlineByDefault,
+      warnings,
+      "showOutlineByDefault"
+    )
   };
 
   return {
@@ -126,19 +219,6 @@ function writeConfig(config: ViewerConfig): void {
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
 }
 
-function applyConfigToAllWindows(config: ViewerConfig): void {
-  globalConfig = config;
-  writeConfig(config);
-
-  for (const ctx of windows) {
-    ctx.config = config;
-    setWatcher(ctx);
-    ctx.window.webview.rpc?.send.configUpdated({ config });
-  }
-
-  settingsWindow?.webview.rpc?.send.configUpdated({ config });
-}
-
 function isMarkdownPath(filePath: string): boolean {
   return MARKDOWN_EXTENSIONS.has(extname(filePath).toLowerCase());
 }
@@ -163,6 +243,30 @@ function canonicalFilePath(inputPath: string): string {
   }
 }
 
+function registerRecentFile(filePath: string): void {
+  const canonical = canonicalFilePath(filePath);
+  if (!isMarkdownPath(canonical)) {
+    return;
+  }
+
+  const deduped = appState.recentFiles.filter((p) => p !== canonical);
+  appState = {
+    ...appState,
+    recentFiles: [canonical, ...deduped].slice(0, RECENTS_LIMIT)
+  };
+  saveAppState(appState);
+  rebuildApplicationMenu();
+}
+
+function findWindowById(winId: number): WindowContext | null {
+  for (const ctx of windows) {
+    if (ctx.window.id === winId) {
+      return ctx;
+    }
+  }
+  return null;
+}
+
 function findOpenWindowByFilePath(filePath: string): WindowContext | null {
   const target = canonicalFilePath(filePath);
   for (const ctx of windows) {
@@ -178,7 +282,7 @@ function findOpenWindowByFilePath(filePath: string): WindowContext | null {
 
 function readMarkdownFile(filePath: string): { content: string; warning: string | null } {
   try {
-    const resolved = normalizeFilePath(filePath);
+    const resolved = canonicalFilePath(filePath);
     if (!existsSync(resolved)) {
       return { content: "", warning: `File not found: ${resolved}` };
     }
@@ -207,7 +311,7 @@ function readMarkdownFile(filePath: string): { content: string; warning: string 
 function pickInitialFilePath(): string | null {
   const args = process.argv
     .slice(2)
-    .map((part) => normalizeFilePath(part))
+    .map((part) => canonicalFilePath(part))
     .filter((part) => !part.endsWith("main.js") && existsSync(part));
 
   if (args.length > 0) {
@@ -282,18 +386,31 @@ function setWatcher(context: WindowContext): void {
 
 function resolveLinkedFile(href: string, fromFilePath: string | null): string {
   if (href.startsWith("file://")) {
-    return normalizeFilePath(href);
+    return canonicalFilePath(href);
   }
 
   if (isAbsolute(href)) {
-    return href;
+    return canonicalFilePath(href);
   }
 
   if (!fromFilePath) {
-    return resolve(process.cwd(), href);
+    return canonicalFilePath(resolve(process.cwd(), href));
   }
 
-  return resolve(dirname(fromFilePath), href);
+  return canonicalFilePath(resolve(dirname(fromFilePath), href));
+}
+
+function applyConfigToAllWindows(config: ViewerConfig): void {
+  globalConfig = config;
+  writeConfig(config);
+
+  for (const ctx of windows) {
+    ctx.config = config;
+    setWatcher(ctx);
+    ctx.window.webview.rpc?.send.configUpdated({ config });
+  }
+
+  settingsWindow?.webview.rpc?.send.configUpdated({ config });
 }
 
 async function openFileFlow(context: WindowContext): Promise<void> {
@@ -305,7 +422,10 @@ async function openFileFlow(context: WindowContext): Promise<void> {
   });
 
   if (picked.length > 0) {
-    context.filePath = normalizeFilePath(picked[0]);
+    const pickedPath = canonicalFilePath(picked[0]);
+    context.filePath = pickedPath;
+    activeContext = context;
+    registerRecentFile(pickedPath);
     setWatcher(context);
     sendUpdate(context);
   }
@@ -335,8 +455,8 @@ function openSourceWindow(context: WindowContext): void {
     frame: {
       width: 980,
       height: 760,
-      x: 220,
-      y: 140
+      x: context.frame.x + 24,
+      y: context.frame.y + 24
     },
     rpc
   });
@@ -348,6 +468,7 @@ function openSourceWindow(context: WindowContext): void {
 
 function openSettingsWindow(): void {
   if (settingsWindow) {
+    settingsWindow.focus();
     return;
   }
 
@@ -373,8 +494,8 @@ function openSettingsWindow(): void {
     frame: {
       width: 760,
       height: 520,
-      x: 260,
-      y: 180
+      x: (activeContext?.frame.x ?? DEFAULT_FRAME.x) + 30,
+      y: (activeContext?.frame.y ?? DEFAULT_FRAME.y) + 30
     },
     rpc
   });
@@ -391,61 +512,100 @@ function menuTarget(): WindowContext | null {
   return activeContext ?? windows.values().next().value ?? null;
 }
 
-function installMenu(): void {
+function buildWindowMenuItems(): any[] {
+  const items: any[] = [
+    { role: "minimize" },
+    { role: "zoom" },
+    { role: "close" },
+    { type: "separator" },
+    { role: "toggleFullScreen" },
+    { type: "separator" },
+    { role: "bringAllToFront" }
+  ];
+
+  if (windows.size > 0) {
+    items.push({ type: "separator" });
+  }
+
+  for (const ctx of windows) {
+    const pathLabel = ctx.filePath ? ` — ${ctx.filePath}` : "";
+    items.push({
+      label: `${basename(ctx.filePath || "Untitled")}${pathLabel}`,
+      action: "focus-window",
+      data: { windowId: ctx.window.id },
+      checked: activeContext?.window.id === ctx.window.id
+    });
+  }
+
+  return items;
+}
+
+function buildRecentMenuItems(): any[] {
+  const recent = appState.recentFiles.filter((path) => existsSync(path)).slice(0, RECENTS_LIMIT);
+
+  if (recent.length === 0) {
+    return [{ label: "No Recent Files", enabled: false }];
+  }
+
+  return recent.map((path) => ({
+    label: path,
+    action: "open-recent",
+    data: { path }
+  }));
+}
+
+function rebuildApplicationMenu(): void {
   ApplicationMenu.setApplicationMenu([
     {
-      label: "File",
+      label: APP_NAME,
       submenu: [
-        { label: "Open Markdown…", action: "open-file", accelerator: "CommandOrControl+O" },
-        { label: "Refresh", action: "refresh", accelerator: "CommandOrControl+R" },
+        { role: "about" },
         { type: "separator" },
-        { label: "Close", role: "close", accelerator: "CommandOrControl+W" },
-        { label: "Quit", role: "quit", accelerator: "q" }
+        {
+          label: "Settings…",
+          action: "settings",
+          accelerator: "CommandOrControl+,"
+        },
+        { type: "separator" },
+        { role: "quit", accelerator: "CommandOrControl+Q" }
       ]
     },
     {
-      label: "View",
+      label: "File",
       submenu: [
-        { label: "View Source", action: "view-source", accelerator: "CommandOrControl+Shift+S" },
-        { label: "Settings", action: "settings", accelerator: "CommandOrControl+," }
+        { label: "Open…", action: "open-file", accelerator: "CommandOrControl+O" },
+        { label: "Open Recent", submenu: buildRecentMenuItems() },
+        { type: "separator" },
+        { label: "Refresh", action: "refresh", accelerator: "CommandOrControl+R" }
       ]
+    },
+    {
+      label: "Window",
+      submenu: buildWindowMenuItems()
     }
   ]);
+}
 
-  Electrobun.events.on("application-menu-clicked", (event) => {
-    const action = String(event.data.action || "");
-    const target = menuTarget();
+function nextWindowFrame(): WindowFrame {
+  if (windows.size === 0) {
+    return appState.lastWindowFrame ? { ...appState.lastWindowFrame } : { ...DEFAULT_FRAME };
+  }
 
-    if (action === "settings") {
-      openSettingsWindow();
-      return;
-    }
-
-    if (!target) {
-      return;
-    }
-
-    if (action === "open-file") {
-      void openFileFlow(target);
-      return;
-    }
-
-    if (action === "refresh") {
-      sendUpdate(target);
-      return;
-    }
-
-    if (action === "view-source") {
-      openSourceWindow(target);
-    }
-  });
+  const source = activeContext?.frame ?? [...windows][windows.size - 1]?.frame ?? DEFAULT_FRAME;
+  return {
+    x: source.x + WINDOW_OFFSET,
+    y: source.y + WINDOW_OFFSET,
+    width: source.width,
+    height: source.height
+  };
 }
 
 function createViewerWindow(initialPath?: string): WindowContext {
   const loaded = loadConfig();
   globalConfig = loaded.config;
 
-  const startPath = initialPath ? normalizeFilePath(initialPath) : pickInitialFilePath();
+  const startPath = initialPath ? canonicalFilePath(initialPath) : pickInitialFilePath();
+  const frame = nextWindowFrame();
 
   let context: WindowContext;
 
@@ -458,7 +618,10 @@ function createViewerWindow(initialPath?: string): WindowContext {
           await openFileFlow(context);
         },
         reloadCurrentFile: () => {
-          sendUpdate(context);
+          context.window.webview.rpc?.send.manualRefreshStart({});
+          setTimeout(() => {
+            sendUpdate(context);
+          }, REFRESH_VISUAL_DELAY_MS);
         },
         openSourceWindow: () => {
           openSourceWindow(context);
@@ -487,12 +650,7 @@ function createViewerWindow(initialPath?: string): WindowContext {
   const window = new BrowserWindow({
     title: APP_NAME,
     url: "views://mainview/index.html",
-    frame: {
-      width: 1360,
-      height: 900,
-      x: 120,
-      y: 80
-    },
+    frame,
     rpc
   });
 
@@ -501,23 +659,71 @@ function createViewerWindow(initialPath?: string): WindowContext {
     watcher: null,
     debounceTimer: null,
     filePath: startPath,
-    config: globalConfig
+    config: globalConfig,
+    frame: { ...frame }
   };
 
   windows.add(context);
   activeContext = context;
+
+  if (startPath) {
+    registerRecentFile(startPath);
+  }
+
   setWatcher(context);
+  rebuildApplicationMenu();
+
+  window.on("focus", () => {
+    activeContext = context;
+    rebuildApplicationMenu();
+  });
+
+  window.on("move", (event: any) => {
+    const data = event?.data;
+    if (typeof data?.x === "number") {
+      context.frame.x = data.x;
+    }
+    if (typeof data?.y === "number") {
+      context.frame.y = data.y;
+    }
+    appState = { ...appState, lastWindowFrame: { ...context.frame } };
+    saveAppState(appState);
+  });
+
+  window.on("resize", (event: any) => {
+    const data = event?.data;
+    if (typeof data?.x === "number") {
+      context.frame.x = data.x;
+    }
+    if (typeof data?.y === "number") {
+      context.frame.y = data.y;
+    }
+    if (typeof data?.width === "number") {
+      context.frame.width = data.width;
+    }
+    if (typeof data?.height === "number") {
+      context.frame.height = data.height;
+    }
+    appState = { ...appState, lastWindowFrame: { ...context.frame } };
+    saveAppState(appState);
+  });
 
   window.on("close", () => {
     context.watcher?.close();
     if (context.debounceTimer) {
       clearTimeout(context.debounceTimer);
     }
+
+    appState = { ...appState, lastWindowFrame: { ...context.frame } };
+    saveAppState(appState);
+
     windows.delete(context);
 
     if (activeContext === context) {
       activeContext = windows.values().next().value ?? null;
     }
+
+    rebuildApplicationMenu();
 
     if (windows.size === 0 && !settingsWindow) {
       Utils.quit();
@@ -532,17 +738,24 @@ function openPathInExistingOrNewWindow(filePath: string): void {
   const existing = findOpenWindowByFilePath(normalized);
   if (existing) {
     activeContext = existing;
+    registerRecentFile(normalized);
     existing.window.focus();
+    rebuildApplicationMenu();
     return;
   }
+
   const reusable = [...windows].find((ctx) => !ctx.filePath);
   if (reusable) {
     reusable.filePath = normalized;
     activeContext = reusable;
+    registerRecentFile(normalized);
     setWatcher(reusable);
     sendUpdate(reusable);
+    reusable.window.focus();
+    rebuildApplicationMenu();
     return;
   }
+
   createViewerWindow(normalized);
 }
 
@@ -572,7 +785,61 @@ function maybeHandleOpenUrl(url: string): void {
   }
 }
 
-installMenu();
+function installMenuHandlers(): void {
+  Electrobun.events.on("application-menu-clicked", (event: any) => {
+    const action = String(event?.data?.action || "");
+    const payload = (event?.data?.data || {}) as Record<string, unknown>;
+    const target = menuTarget();
+
+    if (action === "settings") {
+      openSettingsWindow();
+      return;
+    }
+
+    if (action === "open-recent") {
+      const path = typeof payload["path"] === "string" ? payload["path"] : "";
+      if (path) {
+        openPathInExistingOrNewWindow(path);
+      }
+      return;
+    }
+
+    if (action === "focus-window") {
+      const windowId = typeof payload["windowId"] === "number" ? payload["windowId"] : -1;
+      const ctx = findWindowById(windowId);
+      if (ctx) {
+        activeContext = ctx;
+        ctx.window.focus();
+        rebuildApplicationMenu();
+      }
+      return;
+    }
+
+    if (!target) {
+      return;
+    }
+
+    if (action === "open-file") {
+      void openFileFlow(target);
+      return;
+    }
+
+    if (action === "refresh") {
+      target.window.webview.rpc?.send.manualRefreshStart({});
+      setTimeout(() => {
+        sendUpdate(target);
+      }, REFRESH_VISUAL_DELAY_MS);
+      return;
+    }
+
+    if (action === "view-source") {
+      openSourceWindow(target);
+    }
+  });
+}
+
+rebuildApplicationMenu();
+installMenuHandlers();
 
 Electrobun.events.on("open-url", (event) => {
   maybeHandleOpenUrl(event.data.url);

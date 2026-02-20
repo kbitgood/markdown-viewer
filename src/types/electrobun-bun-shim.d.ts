@@ -12,13 +12,14 @@ declare module "electrobun/bun" {
   }
 
   export class BrowserWindow<T = any> {
+    id: number;
     webview: {
       rpc?: {
         send: any;
       };
     };
     constructor(config: any);
-    on(eventName: string, callback: () => void): void;
+    on(eventName: string, callback: (event?: any) => void): void;
     focus(): void;
   }
 

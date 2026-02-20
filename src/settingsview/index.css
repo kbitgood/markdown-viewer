@@ -54,11 +54,18 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 0.78rem;
-  cursor: pointer;
+  cursor: default;
 }
 
 #status {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.78rem;
   color: #405246;
+}
+
+button,
+label,
+input,
+a {
+  cursor: default !important;
 }

@@ -35,6 +35,14 @@ const rpc = Electroview.defineRPC<MainViewerRPC>({
       configUpdated: ({ config }: { config: ViewerConfig }) => {
         appState.config = config;
         applyConfig(config);
+      },
+      manualRefreshStart: () => {
+        clearWarning();
+        elements.preview.innerHTML = "";
+        elements.mainPanel.classList.add("manual-refresh");
+        setTimeout(() => {
+          elements.mainPanel.classList.remove("manual-refresh");
+        }, 220);
       }
     }
   }
@@ -79,6 +87,7 @@ const elements = {
   preview: document.getElementById("preview") as HTMLElement,
   outlineNav: document.getElementById("outlineNav") as HTMLElement,
   outlinePanel: document.getElementById("outlinePanel") as HTMLElement,
+  mainPanel: document.querySelector(".main-panel") as HTMLElement,
   warningBanner: document.getElementById("warningBanner") as HTMLElement,
   collapseSidebarBtn: document.getElementById("collapseSidebarBtn") as HTMLButtonElement,
   sourceBtn: document.getElementById("sourceBtn") as HTMLButtonElement

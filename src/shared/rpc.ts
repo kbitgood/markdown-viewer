@@ -35,6 +35,7 @@ export type MainViewerRPC = {
       fileUpdated: { content: string; filePath: string; updatedAt: number };
       warning: { message: string };
       configUpdated: { config: ViewerConfig };
+      manualRefreshStart: {};
     };
   }>;
 };
