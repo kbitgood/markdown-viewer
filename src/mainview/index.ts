@@ -273,7 +273,27 @@ function renderFrontMatterPane(frontMatter: string): string {
     })
     .join("");
 
-  return `<section class="front-matter-pane"><div class="fm-head">Front Matter</div><div class="fm-grid">${items}</div></section>`;
+  return `<section class="front-matter-pane is-collapsed" data-frontmatter-pane>
+    <button class="fm-toggle" type="button" data-frontmatter-toggle aria-expanded="false">
+      <span class="fm-caret">▸</span>
+      <span class="fm-head">Front Matter</span>
+      <span class="fm-count">${rows.length} properties</span>
+    </button>
+    <div class="fm-grid" data-frontmatter-content>${items}</div>
+  </section>`;
+}
+
+function bindFrontMatterToggle(): void {
+  const pane = elements.preview.querySelector("[data-frontmatter-pane]") as HTMLElement | null;
+  const toggle = elements.preview.querySelector("[data-frontmatter-toggle]") as HTMLButtonElement | null;
+  if (!pane || !toggle) {
+    return;
+  }
+
+  toggle.addEventListener("click", () => {
+    const collapsed = pane.classList.toggle("is-collapsed");
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  });
 }
 
 function render(): void {
@@ -295,6 +315,7 @@ function render(): void {
   const bodyRoot = (elements.preview.querySelector(".md-body") as HTMLElement) ?? elements.preview;
   buildOutline(bodyRoot);
   bindPreviewLinks();
+  bindFrontMatterToggle();
 }
 
 async function loadInitialState(): Promise<void> {

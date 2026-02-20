@@ -256,11 +256,28 @@ body {
   width: 100%;
   border-bottom: 1px solid #d8d5ca;
   background: #efede4;
-  padding: 0.95rem 1.2rem 1rem;
+  padding: 0.35rem 1rem 0.4rem;
+}
+
+.fm-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.2rem;
+  cursor: pointer;
+}
+
+.fm-caret {
+  font-size: 0.8rem;
+  color: #4a5851;
 }
 
 .fm-head {
-  margin: 0 0 0.65rem;
+  margin: 0;
   font-family: "Sora", sans-serif;
   font-size: 0.76rem;
   letter-spacing: 0.05em;
@@ -268,9 +285,29 @@ body {
   color: #484f46;
 }
 
+.fm-count {
+  margin-left: auto;
+  background: #dde8df;
+  color: #274133;
+  border: 1px solid #c7d8cb;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-family: "DM Mono", monospace;
+  font-size: 0.68rem;
+}
+
 .fm-grid {
   display: grid;
   gap: 0.42rem;
+  padding: 0.2rem 0.2rem 0.35rem;
+}
+
+.front-matter-pane.is-collapsed .fm-grid {
+  display: none;
+}
+
+.front-matter-pane:not(.is-collapsed) .fm-caret {
+  transform: rotate(90deg);
 }
 
 .fm-row {
