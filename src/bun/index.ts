@@ -33,6 +33,7 @@ const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
 const RECENTS_LIMIT = 15;
 const REFRESH_VISUAL_DELAY_MS = 140;
 const WINDOW_OFFSET = 28;
+const ZOOM_STEP = 5;
 
 const DEFAULT_FRAME = {
   x: 120,
@@ -466,6 +467,15 @@ function applyConfigToAllWindows(config: ViewerConfig): void {
   settingsWindow?.webview.rpc?.send.configUpdated({ config });
 }
 
+function updateZoomForAllWindows(delta: number): void {
+  const nextZoom = Math.min(200, Math.max(50, globalConfig.zoomPercent + delta));
+  const nextConfig: ViewerConfig = {
+    ...globalConfig,
+    zoomPercent: nextZoom
+  };
+  applyConfigToAllWindows(nextConfig);
+}
+
 async function openFileFlow(context: WindowContext): Promise<void> {
   const picked = await Utils.openFileDialog({
     canChooseFiles: true,
@@ -657,6 +667,13 @@ function rebuildApplicationMenu(): void {
         { label: "Open Recent", submenu: buildRecentMenuItems() },
         { type: "separator" },
         { label: "Refresh", action: "refresh", accelerator: "CommandOrControl+R" }
+      ]
+    },
+    {
+      label: "View",
+      submenu: [
+        { label: "＋ Zoom In", action: "zoom-in", accelerator: "CommandOrControl+=" },
+        { label: "－ Zoom Out", action: "zoom-out", accelerator: "CommandOrControl+-" }
       ]
     },
     {
@@ -907,6 +924,16 @@ function installMenuHandlers(): void {
         ctx.window.focus();
         rebuildApplicationMenu();
       }
+      return;
+    }
+
+    if (action === "zoom-in") {
+      updateZoomForAllWindows(ZOOM_STEP);
+      return;
+    }
+
+    if (action === "zoom-out") {
+      updateZoomForAllWindows(-ZOOM_STEP);
       return;
     }
 
