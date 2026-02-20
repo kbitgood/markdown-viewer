@@ -147,3 +147,8 @@ Content under H5.
 #### Section B.1
 
 ##### Section B.1.a
+
+## Non-Markdown Local Link
+
+Open local non-markdown file with OS default app:
+[Open local .txt in default app](./non-markdown-target.txt)

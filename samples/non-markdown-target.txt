@@ -1,0 +1,5 @@
+This is a non-markdown local file for open-with-default-app testing.
+
+Expected behavior from Markdown Viewer:
+- Clicking the link in feature-showcase.md should NOT open this inside the Markdown Viewer.
+- It should open with the OS default app for .txt files.
