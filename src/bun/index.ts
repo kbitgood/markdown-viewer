@@ -685,6 +685,15 @@ function createViewerWindow(initialPath?: string): WindowContext {
             });
             return;
           }
+          if (!isMarkdownPath(filePath)) {
+            const opened = Utils.openPath(filePath);
+            if (!opened) {
+              context.window.webview.rpc?.send.warning({
+                message: `Could not open file with system default app: ${filePath}`
+              });
+            }
+            return;
+          }
           openPathInExistingOrNewWindow(filePath);
         },
         openExternalLink: ({ href }: { href: string }) => {
