@@ -40,11 +40,11 @@ body {
   flex: 0 0 280px;
   border-right: 1px solid var(--line);
   padding: 1rem 0.7rem 0.7rem;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--panel);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
   transition: width 160ms ease, min-width 160ms ease, flex-basis 160ms ease;
 }
 
@@ -54,11 +54,6 @@ body {
   justify-content: space-between;
   gap: 0.6rem;
   margin: 0 0.3rem 0.8rem;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--panel);
-  padding-top: 0.15rem;
 }
 
 .outline-panel h2 {
@@ -82,17 +77,20 @@ body {
 }
 
 .outline-panel nav {
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: visible;
-  padding: 0 0.3rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 0.3rem 3.6rem;
 }
 
 .outline-footer {
-  padding: 0.65rem 0.3rem 0.15rem;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  background: linear-gradient(to top, var(--panel) 78%, rgba(236, 233, 223, 0));
+  position: absolute;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: 0.7rem;
+  z-index: 3;
+  background: var(--panel);
 }
 
 .outline-panel a {
