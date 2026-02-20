@@ -56,9 +56,7 @@ const md = new MarkdownIt({
   }
 })
   .use(markdownItTaskLists)
-  .use(markdownItAnchor, {
-    permalink: markdownItAnchor.permalink.headerLink()
-  });
+  .use(markdownItAnchor);
 
 const appState: {
   filePath: string | null;
@@ -81,7 +79,9 @@ const elements = {
   preview: document.getElementById("preview") as HTMLElement,
   outlineNav: document.getElementById("outlineNav") as HTMLElement,
   outlinePanel: document.getElementById("outlinePanel") as HTMLElement,
-  warningBanner: document.getElementById("warningBanner") as HTMLElement
+  warningBanner: document.getElementById("warningBanner") as HTMLElement,
+  collapseSidebarBtn: document.getElementById("collapseSidebarBtn") as HTMLButtonElement,
+  sourceBtn: document.getElementById("sourceBtn") as HTMLButtonElement
 };
 
 function escapeHtml(raw: string): string {
@@ -201,6 +201,16 @@ function applyConfig(config: ViewerConfig): void {
   elements.outlinePanel.classList.toggle("hidden", !config.showOutlineByDefault);
 }
 
+function bindUiControls(): void {
+  elements.collapseSidebarBtn.addEventListener("click", () => {
+    elements.outlinePanel.classList.toggle("collapsed");
+  });
+
+  elements.sourceBtn.addEventListener("click", async () => {
+    await rpc.request.openSourceWindow({});
+  });
+}
+
 function render(): void {
   clearWarning();
 
@@ -232,8 +242,10 @@ async function loadInitialState(): Promise<void> {
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
+    bindUiControls();
     void loadInitialState();
   });
 } else {
+  bindUiControls();
   void loadInitialState();
 }

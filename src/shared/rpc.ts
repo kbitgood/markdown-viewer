@@ -23,6 +23,7 @@ export type MainViewerRPC = {
       getInitialState: { params: {}; response: ViewState };
       pickAndOpenFile: { params: {}; response: void };
       reloadCurrentFile: { params: {}; response: void };
+      openSourceWindow: { params: {}; response: void };
       openLocalLink: { params: { href: string; fromFilePath: string | null }; response: void };
       openExternalLink: { params: { href: string }; response: void };
     };

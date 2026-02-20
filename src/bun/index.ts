@@ -432,6 +432,9 @@ function createViewerWindow(initialPath?: string): WindowContext {
         reloadCurrentFile: () => {
           sendUpdate(context);
         },
+        openSourceWindow: () => {
+          openSourceWindow(context);
+        },
         openLocalLink: ({ href, fromFilePath }: { href: string; fromFilePath: string | null }) => {
           const filePath = resolveLinkedFile(href, fromFilePath);
           if (!existsSync(filePath)) {
