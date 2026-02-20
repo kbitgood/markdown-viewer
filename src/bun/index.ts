@@ -308,6 +308,55 @@ function readMarkdownFile(filePath: string): { content: string; warning: string 
   }
 }
 
+function stripFrontMatter(content: string): string {
+  const normalized = content.replaceAll("\r\n", "\n");
+  if (!(normalized.startsWith("---\n") || normalized.startsWith("+++\n"))) {
+    return normalized;
+  }
+  const delimiter = normalized.startsWith("---\n") ? "---" : "+++";
+  const endToken = `\n${delimiter}\n`;
+  const endIndex = normalized.indexOf(endToken, delimiter.length + 1);
+  if (endIndex === -1) {
+    return normalized;
+  }
+  return normalized.slice(endIndex + endToken.length);
+}
+
+function extractDocumentHeading(content: string): string | null {
+  const body = stripFrontMatter(content);
+  const lines = body.split("\n");
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const match = line.match(/^#{1,6}\s+(.+?)\s*#*$/);
+    if (!match) {
+      continue;
+    }
+    const heading = match[1].trim();
+    if (heading.length > 0) {
+      return heading;
+    }
+  }
+  return null;
+}
+
+function titleFallbackFromPath(filePath: string): string {
+  const base = basename(filePath);
+  if (base.includes(".")) {
+    return base;
+  }
+  return `${base}.md`;
+}
+
+function updateWindowTitle(context: WindowContext, content?: string): void {
+  if (!context.filePath) {
+    context.window.setTitle(APP_NAME);
+    return;
+  }
+  const heading = content ? extractDocumentHeading(content) : null;
+  const title = heading || titleFallbackFromPath(context.filePath);
+  context.window.setTitle(title);
+}
+
 function pickInitialFilePath(): string | null {
   const args = process.argv
     .slice(2)
@@ -349,6 +398,7 @@ function sendUpdate(context: WindowContext): void {
   }
 
   const read = readMarkdownFile(context.filePath);
+  updateWindowTitle(context, read.content);
   context.window.webview.rpc?.send.fileUpdated({
     content: read.content,
     filePath: context.filePath,
@@ -426,6 +476,7 @@ async function openFileFlow(context: WindowContext): Promise<void> {
     context.filePath = pickedPath;
     activeContext = context;
     registerRecentFile(pickedPath);
+    updateWindowTitle(context, readMarkdownFile(pickedPath).content);
     setWatcher(context);
     sendUpdate(context);
   }
@@ -668,6 +719,9 @@ function createViewerWindow(initialPath?: string): WindowContext {
 
   if (startPath) {
     registerRecentFile(startPath);
+    updateWindowTitle(context, readMarkdownFile(startPath).content);
+  } else {
+    updateWindowTitle(context);
   }
 
   setWatcher(context);
