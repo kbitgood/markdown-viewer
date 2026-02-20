@@ -40,7 +40,8 @@ body {
   flex: 0 0 280px;
   border-right: 1px solid var(--line);
   padding: 1rem 0.7rem 0.7rem;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--panel);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -53,6 +54,11 @@ body {
   justify-content: space-between;
   gap: 0.6rem;
   margin: 0 0.3rem 0.8rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  padding-top: 0.15rem;
 }
 
 .outline-panel h2 {
@@ -77,12 +83,16 @@ body {
 
 .outline-panel nav {
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 0 0.3rem;
 }
 
 .outline-footer {
   padding: 0.65rem 0.3rem 0.15rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: linear-gradient(to top, var(--panel) 78%, rgba(236, 233, 223, 0));
 }
 
 .outline-panel a {
