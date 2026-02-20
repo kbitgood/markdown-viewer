@@ -11,12 +11,28 @@
       <aside id="outlinePanel" class="outline-panel">
         <div class="outline-head">
           <h2>Outline</h2>
-          <button id="collapseSidebarBtn" class="collapse-btn" type="button" aria-label="Collapse sidebar">◀</button>
+          <div class="outline-actions">
+            <button
+              id="sourceBtn"
+              class="icon-btn source-icon-btn"
+              type="button"
+              aria-label="Open source view"
+              title="Open source view"
+            >
+              &lt;/&gt;
+            </button>
+            <button
+              id="collapseSidebarBtn"
+              class="icon-btn collapse-btn"
+              type="button"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              ◀
+            </button>
+          </div>
         </div>
         <nav id="outlineNav"></nav>
-        <div class="outline-footer">
-          <button id="sourceBtn" class="source-btn" type="button">View Source</button>
-        </div>
       </aside>
 
       <section class="main-panel">
