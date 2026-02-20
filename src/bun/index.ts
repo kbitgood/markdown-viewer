@@ -1,4 +1,9 @@
-import Electrobun, { BrowserView, BrowserWindow, Utils } from "electrobun/bun";
+import Electrobun, {
+  ApplicationMenu,
+  BrowserView,
+  BrowserWindow,
+  Utils
+} from "electrobun/bun";
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +15,13 @@ import {
 import { homedir } from "node:os";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type { FSWatcher } from "node:fs";
-import type { ViewerConfig, ViewState, ViewerRPC } from "../shared/rpc";
+import type {
+  MainViewerRPC,
+  SettingsRPC,
+  SourceRPC,
+  ViewerConfig,
+  ViewState
+} from "../shared/rpc";
 
 const APP_NAME = "Markdown Viewer";
 const CONFIG_DIR = join(homedir(), ".config", "markdown-viewer");
@@ -35,28 +46,12 @@ type WindowContext = {
 };
 
 const windows = new Set<WindowContext>();
+let activeContext: WindowContext | null = null;
+let settingsWindow: BrowserWindow<any> | null = null;
+let globalConfig = loadConfig().config;
 
 function ensureConfigDir(): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
-}
-
-function sanitizeConfig(raw: unknown): { config: ViewerConfig; warning: string | null } {
-  const warnings: string[] = [];
-  const input = typeof raw === "object" && raw ? (raw as Record<string, unknown>) : {};
-
-  const config: ViewerConfig = {
-    refreshDebounceMs: clampNumber(input["refreshDebounceMs"], 50, 5000, defaultConfig.refreshDebounceMs, warnings, "refreshDebounceMs"),
-    openExternalLinksInBrowser: toBoolean(input["openExternalLinksInBrowser"], defaultConfig.openExternalLinksInBrowser, warnings, "openExternalLinksInBrowser"),
-    openLocalLinksInApp: toBoolean(input["openLocalLinksInApp"], defaultConfig.openLocalLinksInApp, warnings, "openLocalLinksInApp"),
-    zoomPercent: clampNumber(input["zoomPercent"], 50, 200, defaultConfig.zoomPercent, warnings, "zoomPercent"),
-    sourceVisibleByDefault: toBoolean(input["sourceVisibleByDefault"], defaultConfig.sourceVisibleByDefault, warnings, "sourceVisibleByDefault"),
-    showOutlineByDefault: toBoolean(input["showOutlineByDefault"], defaultConfig.showOutlineByDefault, warnings, "showOutlineByDefault")
-  };
-
-  return {
-    config,
-    warning: warnings.length ? `Invalid config keys reset to defaults: ${warnings.join(", ")}` : null
-  };
 }
 
 function clampNumber(
@@ -86,6 +81,25 @@ function toBoolean(value: unknown, fallback: boolean, warnings: string[], key: s
   return value;
 }
 
+function sanitizeConfig(raw: unknown): { config: ViewerConfig; warning: string | null } {
+  const warnings: string[] = [];
+  const input = typeof raw === "object" && raw ? (raw as Record<string, unknown>) : {};
+
+  const config: ViewerConfig = {
+    refreshDebounceMs: clampNumber(input["refreshDebounceMs"], 50, 5000, defaultConfig.refreshDebounceMs, warnings, "refreshDebounceMs"),
+    openExternalLinksInBrowser: toBoolean(input["openExternalLinksInBrowser"], defaultConfig.openExternalLinksInBrowser, warnings, "openExternalLinksInBrowser"),
+    openLocalLinksInApp: toBoolean(input["openLocalLinksInApp"], defaultConfig.openLocalLinksInApp, warnings, "openLocalLinksInApp"),
+    zoomPercent: clampNumber(input["zoomPercent"], 50, 200, defaultConfig.zoomPercent, warnings, "zoomPercent"),
+    sourceVisibleByDefault: false,
+    showOutlineByDefault: toBoolean(input["showOutlineByDefault"], defaultConfig.showOutlineByDefault, warnings, "showOutlineByDefault")
+  };
+
+  return {
+    config,
+    warning: warnings.length ? `Invalid config keys reset to defaults: ${warnings.join(", ")}` : null
+  };
+}
+
 function loadConfig(): { config: ViewerConfig; warning: string | null } {
   try {
     ensureConfigDir();
@@ -107,6 +121,19 @@ function loadConfig(): { config: ViewerConfig; warning: string | null } {
 function writeConfig(config: ViewerConfig): void {
   ensureConfigDir();
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+}
+
+function applyConfigToAllWindows(config: ViewerConfig): void {
+  globalConfig = config;
+  writeConfig(config);
+
+  for (const ctx of windows) {
+    ctx.config = config;
+    setWatcher(ctx);
+    ctx.window.webview.rpc?.send.configUpdated({ config });
+  }
+
+  settingsWindow?.webview.rpc?.send.configUpdated({ config });
 }
 
 function isMarkdownPath(filePath: string): boolean {
@@ -150,7 +177,8 @@ function readMarkdownFile(filePath: string): { content: string; warning: string 
 }
 
 function pickInitialFilePath(): string | null {
-  const args = process.argv.slice(2)
+  const args = process.argv
+    .slice(2)
     .map((part) => normalizeFilePath(part))
     .filter((part) => !part.endsWith("main.js") && existsSync(part));
 
@@ -161,9 +189,49 @@ function pickInitialFilePath(): string | null {
   return null;
 }
 
+function buildState(filePath: string | null, config: ViewerConfig, warning: string | null): ViewState {
+  if (!filePath) {
+    return {
+      filePath: null,
+      content:
+        "# Welcome\n\nOpen a markdown document from the File menu (`Cmd+O`).\n\nEverything else auto-refreshes in the background.",
+      warning,
+      config,
+      updatedAt: Date.now()
+    };
+  }
+
+  const read = readMarkdownFile(filePath);
+  return {
+    filePath,
+    content: read.content,
+    warning: warning ?? read.warning,
+    config,
+    updatedAt: Date.now()
+  };
+}
+
+function sendUpdate(context: WindowContext): void {
+  if (!context.filePath) {
+    return;
+  }
+
+  const read = readMarkdownFile(context.filePath);
+  context.window.webview.rpc?.send.fileUpdated({
+    content: read.content,
+    filePath: context.filePath,
+    updatedAt: Date.now()
+  });
+
+  if (read.warning) {
+    context.window.webview.rpc?.send.warning({ message: read.warning });
+  }
+}
+
 function setWatcher(context: WindowContext): void {
   context.watcher?.close();
   context.watcher = null;
+
   if (!context.filePath) {
     return;
   }
@@ -173,20 +241,8 @@ function setWatcher(context: WindowContext): void {
       if (context.debounceTimer) {
         clearTimeout(context.debounceTimer);
       }
-
       context.debounceTimer = setTimeout(() => {
-        if (!context.filePath) {
-          return;
-        }
-        const read = readMarkdownFile(context.filePath);
-        context.window.webview.rpc?.send.fileUpdated({
-          content: read.content,
-          filePath: context.filePath,
-          updatedAt: Date.now()
-        });
-        if (read.warning) {
-          context.window.webview.rpc?.send.warning({ message: read.warning });
-        }
+        sendUpdate(context);
       }, context.config.refreshDebounceMs);
     });
   } catch (error) {
@@ -212,86 +268,171 @@ function resolveLinkedFile(href: string, fromFilePath: string | null): string {
   return resolve(dirname(fromFilePath), href);
 }
 
-function buildState(filePath: string | null, config: ViewerConfig, warning: string | null): ViewState {
-  if (!filePath) {
-    return {
-      filePath: null,
-      content:
-        "# Welcome\n\nUse **Open File** to load a markdown document.\n\n## Finder Integration\n\nTo enable double-click open for `.md` files in packaged builds:\n\n1. Run `bun run build`\n2. Run `bun run postbuild:mac`\n3. In Finder, use **Get Info -> Open with -> Markdown Viewer** and click **Change All**.",
-      warning:
-        warning ??
-        "If Finder double-click does not open this app yet, run `bun run postbuild:mac` and set the default app in Finder.",
-      config,
-      updatedAt: Date.now()
-    };
-  }
+async function openFileFlow(context: WindowContext): Promise<void> {
+  const picked = await Utils.openFileDialog({
+    canChooseFiles: true,
+    canChooseDirectory: false,
+    allowsMultipleSelection: false,
+    allowedFileTypes: "md,markdown,mdown,mkd,txt"
+  });
 
-  const read = readMarkdownFile(filePath);
-  return {
-    filePath,
-    content: read.content,
-    warning: warning ?? read.warning,
-    config,
-    updatedAt: Date.now()
-  };
+  if (picked.length > 0) {
+    context.filePath = normalizeFilePath(picked[0]);
+    setWatcher(context);
+    sendUpdate(context);
+  }
 }
 
-function createViewerWindow(initialPath?: string): WindowContext {
-  const loadedConfig = loadConfig();
-  const contextConfig = loadedConfig.config;
-  const startPath = initialPath ? normalizeFilePath(initialPath) : pickInitialFilePath();
+function openSourceWindow(context: WindowContext): void {
+  const filePath = context.filePath;
+  const content = filePath ? readMarkdownFile(filePath).content : "";
 
-  const rpc = BrowserView.defineRPC<ViewerRPC>({
+  const rpc = BrowserView.defineRPC<SourceRPC>({
     maxRequestTime: 10000,
     handlers: {
       requests: {
-        getInitialState: () => {
-          const state = buildState(context.filePath, context.config, loadedConfig.warning);
-          return state;
-        },
+        getSourceState: () => ({
+          filePath,
+          content,
+          updatedAt: Date.now()
+        })
+      },
+      messages: {}
+    }
+  });
+
+  const win = new BrowserWindow({
+    title: `Source${filePath ? `: ${filePath}` : ""}`,
+    url: "views://sourceview/index.html",
+    frame: {
+      width: 980,
+      height: 760,
+      x: 220,
+      y: 140
+    },
+    rpc
+  });
+
+  win.on("close", () => {
+    // no-op
+  });
+}
+
+function openSettingsWindow(): void {
+  if (settingsWindow) {
+    return;
+  }
+
+  const rpc = BrowserView.defineRPC<SettingsRPC>({
+    maxRequestTime: 10000,
+    handlers: {
+      requests: {
+        getSettingsState: () => globalConfig,
+        saveSettings: (config: ViewerConfig) => {
+          const sanitized = sanitizeConfig(config).config;
+          applyConfigToAllWindows(sanitized);
+          settingsWindow?.webview.rpc?.send.status({ message: "Saved" });
+          return sanitized;
+        }
+      },
+      messages: {}
+    }
+  });
+
+  settingsWindow = new BrowserWindow({
+    title: "Markdown Viewer Settings",
+    url: "views://settingsview/index.html",
+    frame: {
+      width: 760,
+      height: 520,
+      x: 260,
+      y: 180
+    },
+    rpc
+  });
+
+  settingsWindow.on("close", () => {
+    settingsWindow = null;
+    if (windows.size === 0) {
+      Utils.quit();
+    }
+  });
+}
+
+function menuTarget(): WindowContext | null {
+  return activeContext ?? windows.values().next().value ?? null;
+}
+
+function installMenu(): void {
+  ApplicationMenu.setApplicationMenu([
+    {
+      label: "File",
+      submenu: [
+        { label: "Open Markdown…", action: "open-file", accelerator: "CommandOrControl+O" },
+        { label: "Refresh", action: "refresh", accelerator: "CommandOrControl+R" },
+        { type: "separator" },
+        { label: "Close", role: "close", accelerator: "CommandOrControl+W" },
+        { label: "Quit", role: "quit", accelerator: "q" }
+      ]
+    },
+    {
+      label: "View",
+      submenu: [
+        { label: "View Source", action: "view-source", accelerator: "CommandOrControl+Shift+S" },
+        { label: "Settings", action: "settings", accelerator: "CommandOrControl+," }
+      ]
+    }
+  ]);
+
+  Electrobun.events.on("application-menu-clicked", (event) => {
+    const action = String(event.data.action || "");
+    const target = menuTarget();
+
+    if (action === "settings") {
+      openSettingsWindow();
+      return;
+    }
+
+    if (!target) {
+      return;
+    }
+
+    if (action === "open-file") {
+      void openFileFlow(target);
+      return;
+    }
+
+    if (action === "refresh") {
+      sendUpdate(target);
+      return;
+    }
+
+    if (action === "view-source") {
+      openSourceWindow(target);
+    }
+  });
+}
+
+function createViewerWindow(initialPath?: string): WindowContext {
+  const loaded = loadConfig();
+  globalConfig = loaded.config;
+
+  const startPath = initialPath ? normalizeFilePath(initialPath) : pickInitialFilePath();
+
+  let context: WindowContext;
+
+  const rpc = BrowserView.defineRPC<MainViewerRPC>({
+    maxRequestTime: 10000,
+    handlers: {
+      requests: {
+        getInitialState: () => buildState(context.filePath, context.config, loaded.warning),
         pickAndOpenFile: async () => {
-          const picked = await Utils.openFileDialog({
-            canChooseFiles: true,
-            canChooseDirectory: false,
-            allowsMultipleSelection: false,
-            allowedFileTypes: "md,markdown,mdown,mkd,txt"
-          });
-          if (picked.length > 0) {
-            context.filePath = normalizeFilePath(picked[0]);
-            setWatcher(context);
-            const read = readMarkdownFile(context.filePath);
-            context.window.webview.rpc?.send.fileUpdated({
-              content: read.content,
-              filePath: context.filePath,
-              updatedAt: Date.now()
-            });
-            if (read.warning) {
-              context.window.webview.rpc?.send.warning({ message: read.warning });
-            }
-          }
+          await openFileFlow(context);
         },
         reloadCurrentFile: () => {
-          if (!context.filePath) {
-            context.window.webview.rpc?.send.warning({ message: "No file loaded." });
-            return;
-          }
-          const read = readMarkdownFile(context.filePath);
-          context.window.webview.rpc?.send.fileUpdated({
-            content: read.content,
-            filePath: context.filePath,
-            updatedAt: Date.now()
-          });
-          if (read.warning) {
-            context.window.webview.rpc?.send.warning({ message: read.warning });
-          }
+          sendUpdate(context);
         },
-        openLocalLink: ({
-          href,
-          fromFilePath
-        }: {
-          href: string;
-          fromFilePath: string | null;
-        }) => {
+        openLocalLink: ({ href, fromFilePath }: { href: string; fromFilePath: string | null }) => {
           const filePath = resolveLinkedFile(href, fromFilePath);
           if (!existsSync(filePath)) {
             context.window.webview.rpc?.send.warning({
@@ -299,45 +440,15 @@ function createViewerWindow(initialPath?: string): WindowContext {
             });
             return;
           }
-
           context.filePath = filePath;
           setWatcher(context);
-
-          const read = readMarkdownFile(filePath);
-          context.window.webview.rpc?.send.fileUpdated({
-            content: read.content,
-            filePath,
-            updatedAt: Date.now()
-          });
-          if (read.warning) {
-            context.window.webview.rpc?.send.warning({ message: read.warning });
-          }
+          sendUpdate(context);
         },
         openExternalLink: ({ href }: { href: string }) => {
           const opened = Utils.openExternal(href);
           if (!opened) {
-            context.window.webview.rpc?.send.warning({
-              message: `Failed to open link: ${href}`
-            });
+            context.window.webview.rpc?.send.warning({ message: `Failed to open link: ${href}` });
           }
-        },
-        updateConfig: (partial: Partial<ViewerConfig>) => {
-          const merged = { ...context.config, ...partial };
-          const validated = sanitizeConfig(merged).config;
-          context.config = validated;
-          writeConfig(validated);
-          setWatcher(context);
-          context.window.webview.rpc?.send.configUpdated({ config: validated });
-        },
-        toggleSourcePreference: ({ visible }: { visible: boolean }) => {
-          context.config = { ...context.config, sourceVisibleByDefault: visible };
-          writeConfig(context.config);
-          context.window.webview.rpc?.send.configUpdated({ config: context.config });
-        },
-        toggleOutlinePreference: ({ visible }: { visible: boolean }) => {
-          context.config = { ...context.config, showOutlineByDefault: visible };
-          writeConfig(context.config);
-          context.window.webview.rpc?.send.configUpdated({ config: context.config });
         }
       },
       messages: {}
@@ -356,15 +467,16 @@ function createViewerWindow(initialPath?: string): WindowContext {
     rpc
   });
 
-  const context: WindowContext = {
+  context = {
     window,
     watcher: null,
     debounceTimer: null,
     filePath: startPath,
-    config: contextConfig
+    config: globalConfig
   };
 
   windows.add(context);
+  activeContext = context;
   setWatcher(context);
 
   window.on("close", () => {
@@ -373,7 +485,12 @@ function createViewerWindow(initialPath?: string): WindowContext {
       clearTimeout(context.debounceTimer);
     }
     windows.delete(context);
-    if (windows.size === 0) {
+
+    if (activeContext === context) {
+      activeContext = windows.values().next().value ?? null;
+    }
+
+    if (windows.size === 0 && !settingsWindow) {
       Utils.quit();
     }
   });
@@ -396,6 +513,8 @@ function maybeHandleOpenUrl(url: string): void {
     // ignore malformed URLs
   }
 }
+
+installMenu();
 
 Electrobun.events.on("open-url", (event) => {
   maybeHandleOpenUrl(event.data.url);

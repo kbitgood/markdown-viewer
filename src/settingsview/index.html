@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Viewer Settings</h1>
+      <form id="settingsForm">
+        <label>
+          Refresh debounce (ms)
+          <input id="refreshDebounce" type="number" min="50" max="5000" step="50" />
+        </label>
+
+        <label>
+          Zoom (%)
+          <input id="zoomPercent" type="number" min="50" max="200" step="5" />
+        </label>
+
+        <label class="check">
+          <input id="openExternalLinks" type="checkbox" />
+          Open web links in default browser
+        </label>
+
+        <label class="check">
+          <input id="openLocalLinks" type="checkbox" />
+          Open local markdown links in app
+        </label>
+
+        <label class="check">
+          <input id="showOutline" type="checkbox" />
+          Show outline sidebar by default
+        </label>
+
+        <button type="submit">Save</button>
+      </form>
+      <p id="status"></p>
+    </main>
+    <script type="module" src="index.js"></script>
+  </body>
+</html>

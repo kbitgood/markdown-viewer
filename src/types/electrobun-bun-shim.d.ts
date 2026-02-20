@@ -26,4 +26,8 @@ declare module "electrobun/bun" {
     openFileDialog(config?: any): Promise<string[]>;
     openExternal(url: string): boolean;
   };
+
+  export const ApplicationMenu: {
+    setApplicationMenu(menu: any[]): void;
+  };
 }

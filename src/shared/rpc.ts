@@ -17,7 +17,7 @@ export type ViewState = {
   updatedAt: number;
 };
 
-export type ViewerRPC = {
+export type MainViewerRPC = {
   bun: RPCSchema<{
     requests: {
       getInitialState: { params: {}; response: ViewState };
@@ -25,9 +25,6 @@ export type ViewerRPC = {
       reloadCurrentFile: { params: {}; response: void };
       openLocalLink: { params: { href: string; fromFilePath: string | null }; response: void };
       openExternalLink: { params: { href: string }; response: void };
-      updateConfig: { params: Partial<ViewerConfig>; response: void };
-      toggleSourcePreference: { params: { visible: boolean }; response: void };
-      toggleOutlinePreference: { params: { visible: boolean }; response: void };
     };
     messages: {};
   }>;
@@ -38,5 +35,38 @@ export type ViewerRPC = {
       warning: { message: string };
       configUpdated: { config: ViewerConfig };
     };
+  }>;
+};
+
+export type SettingsRPC = {
+  bun: RPCSchema<{
+    requests: {
+      getSettingsState: { params: {}; response: ViewerConfig };
+      saveSettings: { params: ViewerConfig; response: ViewerConfig };
+    };
+    messages: {};
+  }>;
+  webview: RPCSchema<{
+    requests: {};
+    messages: {
+      configUpdated: { config: ViewerConfig };
+      status: { message: string };
+    };
+  }>;
+};
+
+export type SourceRPC = {
+  bun: RPCSchema<{
+    requests: {
+      getSourceState: {
+        params: {};
+        response: { filePath: string | null; content: string; updatedAt: number };
+      };
+    };
+    messages: {};
+  }>;
+  webview: RPCSchema<{
+    requests: {};
+    messages: {};
   }>;
 };

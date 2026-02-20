@@ -6,11 +6,12 @@ A standalone markdown viewer built with Electrobun.
 
 - GFM rendering (tables, task lists, fenced code, strikethrough, autolinks)
 - Dark-mode code blocks
-- Preview + outline sidebar
-- Source toggle (read-only)
-- Auto-refresh on file changes with debounce + status indicator
+- Clean layout: outline sidebar (left) + full markdown canvas (right)
+- View Source as a separate window from the app menu
+- Auto-refresh on file changes with debounce (no manual status bar)
 - Local link navigation in-app
 - External links open in default browser
+- Settings in a dedicated settings window opened from the app menu
 - Config persisted to `~/.config/markdown-viewer/config.json`
 - macOS Info.plist patch script for `.md` file association
 

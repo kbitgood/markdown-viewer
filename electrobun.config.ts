@@ -15,11 +15,20 @@ export default {
     views: {
       mainview: {
         entrypoint: "src/mainview/index.ts"
+      },
+      settingsview: {
+        entrypoint: "src/settingsview/index.ts"
+      },
+      sourceview: {
+        entrypoint: "src/sourceview/index.ts"
       }
     },
     copy: {
       "src/mainview/index.html": "views/mainview/index.html",
-      "src/mainview/index.css": "views/mainview/index.css"
+      "src/mainview/index.css": "views/mainview/index.css",
+      "src/settingsview/index.html": "views/settingsview/index.html",
+      "src/settingsview/index.css": "views/settingsview/index.css",
+      "src/sourceview/index.html": "views/sourceview/index.html"
     },
     buildFolder: "build",
     artifactFolder: "artifacts",

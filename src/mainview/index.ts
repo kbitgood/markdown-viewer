@@ -10,7 +10,7 @@ import bash from "highlight.js/lib/languages/bash";
 import xml from "highlight.js/lib/languages/xml";
 import markdown from "highlight.js/lib/languages/markdown";
 import createDOMPurify from "dompurify";
-import type { ViewerConfig, ViewerRPC } from "../shared/rpc";
+import type { MainViewerRPC, ViewerConfig } from "../shared/rpc";
 
 hljs.registerLanguage("typescript", ts);
 hljs.registerLanguage("javascript", js);
@@ -19,33 +19,22 @@ hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("xml", xml);
 hljs.registerLanguage("markdown", markdown);
 
-const rpc = Electroview.defineRPC<ViewerRPC>({
+const rpc = Electroview.defineRPC<MainViewerRPC>({
   maxRequestTime: 10000,
   handlers: {
     requests: {},
     messages: {
-      fileUpdated: ({
-        content,
-        filePath,
-        updatedAt
-      }: {
-        content: string;
-        filePath: string;
-        updatedAt: number;
-      }) => {
+      fileUpdated: ({ content, filePath }: { content: string; filePath: string }) => {
         appState.content = content;
         appState.filePath = filePath;
-        appState.updatedAt = updatedAt;
         render();
-        flashStatus("Updated", `Rendered changes from ${prettyTime(updatedAt)}`);
       },
       warning: ({ message }: { message: string }) => {
         showWarning(message);
       },
       configUpdated: ({ config }: { config: ViewerConfig }) => {
         appState.config = config;
-        applyConfigToControls(config);
-        applyConfigToDocument(config);
+        applyConfig(config);
       }
     }
   }
@@ -74,14 +63,10 @@ const md = new MarkdownIt({
 const appState: {
   filePath: string | null;
   content: string;
-  updatedAt: number;
   config: ViewerConfig;
-  sourceVisible: boolean;
-  outlineVisible: boolean;
 } = {
   filePath: null,
   content: "",
-  updatedAt: Date.now(),
   config: {
     refreshDebounceMs: 220,
     openExternalLinksInBrowser: true,
@@ -89,28 +74,14 @@ const appState: {
     zoomPercent: 100,
     sourceVisibleByDefault: false,
     showOutlineByDefault: true
-  },
-  sourceVisible: false,
-  outlineVisible: true
+  }
 };
 
 const elements = {
   preview: document.getElementById("preview") as HTMLElement,
   outlineNav: document.getElementById("outlineNav") as HTMLElement,
-  sourcePanel: document.getElementById("sourcePanel") as HTMLElement,
-  sourceContent: document.getElementById("sourceContent") as HTMLElement,
   outlinePanel: document.getElementById("outlinePanel") as HTMLElement,
-  warningBanner: document.getElementById("warningBanner") as HTMLElement,
-  statusPill: document.getElementById("statusPill") as HTMLElement,
-  statusText: document.getElementById("statusText") as HTMLElement,
-  filePathLabel: document.getElementById("filePathLabel") as HTMLElement,
-  settingsPanel: document.getElementById("settingsPanel") as HTMLElement,
-  refreshDebounceInput: document.getElementById("refreshDebounceInput") as HTMLInputElement,
-  zoomInput: document.getElementById("zoomInput") as HTMLInputElement,
-  externalLinksInput: document.getElementById("externalLinksInput") as HTMLInputElement,
-  localLinksInput: document.getElementById("localLinksInput") as HTMLInputElement,
-  sourceToggleBtn: document.getElementById("sourceToggleBtn") as HTMLButtonElement,
-  outlineToggleBtn: document.getElementById("outlineToggleBtn") as HTMLButtonElement
+  warningBanner: document.getElementById("warningBanner") as HTMLElement
 };
 
 function escapeHtml(raw: string): string {
@@ -122,15 +93,6 @@ function escapeHtml(raw: string): string {
     .replaceAll("'", "&#39;");
 }
 
-function prettyTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString();
-}
-
-function flashStatus(label: string, detail: string): void {
-  elements.statusPill.textContent = label;
-  elements.statusText.textContent = detail;
-}
-
 function showWarning(message: string): void {
   elements.warningBanner.textContent = message;
   elements.warningBanner.classList.remove("hidden");
@@ -139,6 +101,15 @@ function showWarning(message: string): void {
 function clearWarning(): void {
   elements.warningBanner.textContent = "";
   elements.warningBanner.classList.add("hidden");
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
 }
 
 function buildOutline(root: HTMLElement): void {
@@ -173,76 +144,16 @@ function buildOutline(root: HTMLElement): void {
   }
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
-
-function applyConfigToControls(config: ViewerConfig): void {
-  elements.refreshDebounceInput.value = String(config.refreshDebounceMs);
-  elements.zoomInput.value = String(config.zoomPercent);
-  elements.externalLinksInput.checked = config.openExternalLinksInBrowser;
-  elements.localLinksInput.checked = config.openLocalLinksInApp;
-}
-
-function applyConfigToDocument(config: ViewerConfig): void {
-  const scale = Math.max(0.5, Math.min(2, config.zoomPercent / 100));
-  document.documentElement.style.fontSize = `${scale}rem`;
-}
-
-function setSourceVisibility(visible: boolean, persist = false): void {
-  appState.sourceVisible = visible;
-  elements.sourcePanel.classList.toggle("hidden", !visible);
-  elements.sourceToggleBtn.classList.toggle("ghost", !visible);
-  if (persist) {
-    void rpc.request.toggleSourcePreference({ visible });
-  }
-}
-
-function setOutlineVisibility(visible: boolean, persist = false): void {
-  appState.outlineVisible = visible;
-  elements.outlinePanel.classList.toggle("hidden", !visible);
-  elements.outlineToggleBtn.classList.toggle("ghost", !visible);
-  if (persist) {
-    void rpc.request.toggleOutlinePreference({ visible });
-  }
-}
-
-function render(): void {
-  clearWarning();
-
-  const rendered = md.render(appState.content || "# Empty file\n\nThis file has no markdown content.");
-  const safeHtml = purifier.sanitize(rendered, {
-    USE_PROFILES: { html: true },
-    FORBID_TAGS: ["style", "script", "iframe"],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|file):|\/|\.|#)/i
-  });
-
-  elements.preview.innerHTML = safeHtml;
-  elements.sourceContent.textContent = appState.content;
-  elements.filePathLabel.textContent = appState.filePath ?? "No file loaded";
-
-  buildOutline(elements.preview);
-  bindPreviewLinks();
-}
-
 function resolveRelativeHref(href: string, fromFilePath: string | null): string {
   if (href.startsWith("file://")) {
     return decodeURIComponent(href.replace("file://", ""));
   }
-
   if (!fromFilePath) {
     return href;
   }
-
   if (href.startsWith("/")) {
     return href;
   }
-
   const baseUrl = new URL(`file://${fromFilePath}`);
   const resolved = new URL(href, baseUrl);
   return decodeURIComponent(resolved.pathname);
@@ -284,84 +195,45 @@ function bindPreviewLinks(): void {
   }
 }
 
+function applyConfig(config: ViewerConfig): void {
+  const scale = Math.max(0.5, Math.min(2, config.zoomPercent / 100));
+  document.documentElement.style.fontSize = `${scale}rem`;
+  elements.outlinePanel.classList.toggle("hidden", !config.showOutlineByDefault);
+}
+
+function render(): void {
+  clearWarning();
+
+  const rendered = md.render(appState.content || "# Empty file\n\nThis file has no markdown content.");
+  const safeHtml = purifier.sanitize(rendered, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "script", "iframe"],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|file):|\/|\.|#)/i
+  });
+
+  elements.preview.innerHTML = safeHtml;
+  buildOutline(elements.preview);
+  bindPreviewLinks();
+}
+
 async function loadInitialState(): Promise<void> {
   const state = await rpc.request.getInitialState({});
   appState.filePath = state.filePath;
   appState.content = state.content;
-  appState.updatedAt = state.updatedAt;
   appState.config = state.config;
 
   if (state.warning) {
     showWarning(state.warning);
   }
 
-  appState.sourceVisible = state.config.sourceVisibleByDefault;
-  appState.outlineVisible = state.config.showOutlineByDefault;
-
-  applyConfigToControls(state.config);
-  applyConfigToDocument(state.config);
-  setSourceVisibility(appState.sourceVisible, false);
-  setOutlineVisibility(appState.outlineVisible, false);
-
+  applyConfig(state.config);
   render();
 }
 
-function bindControls(): void {
-  document.getElementById("openFileBtn")?.addEventListener("click", async () => {
-    await rpc.request.pickAndOpenFile({});
-  });
-
-  document.getElementById("refreshBtn")?.addEventListener("click", async () => {
-    await rpc.request.reloadCurrentFile({});
-  });
-
-  elements.sourceToggleBtn.addEventListener("click", () => {
-    setSourceVisibility(!appState.sourceVisible, true);
-  });
-
-  elements.outlineToggleBtn.addEventListener("click", () => {
-    setOutlineVisibility(!appState.outlineVisible, true);
-  });
-
-  document.getElementById("settingsToggleBtn")?.addEventListener("click", () => {
-    elements.settingsPanel.classList.toggle("hidden");
-  });
-
-  elements.refreshDebounceInput.addEventListener("change", async () => {
-    const debounce = Number(elements.refreshDebounceInput.value);
-    if (Number.isFinite(debounce)) {
-      await rpc.request.updateConfig({ refreshDebounceMs: debounce });
-      flashStatus("Saved", "Refresh debounce updated");
-    }
-  });
-
-  elements.zoomInput.addEventListener("change", async () => {
-    const zoomPercent = Number(elements.zoomInput.value);
-    if (Number.isFinite(zoomPercent)) {
-      await rpc.request.updateConfig({ zoomPercent });
-      flashStatus("Saved", "Zoom updated");
-    }
-  });
-
-  elements.externalLinksInput.addEventListener("change", async () => {
-    await rpc.request.updateConfig({
-      openExternalLinksInBrowser: elements.externalLinksInput.checked
-    });
-  });
-
-  elements.localLinksInput.addEventListener("change", async () => {
-    await rpc.request.updateConfig({
-      openLocalLinksInApp: elements.localLinksInput.checked
-    });
-  });
-}
-
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", async () => {
-    bindControls();
-    await loadInitialState();
+  document.addEventListener("DOMContentLoaded", () => {
+    void loadInitialState();
   });
 } else {
-  bindControls();
   void loadInitialState();
 }
