@@ -672,6 +672,8 @@ function rebuildApplicationMenu(): void {
     {
       label: "View",
       submenu: [
+        { label: "Toggle Sidebar", action: "toggle-sidebar", accelerator: "CommandOrControl+S" },
+        { type: "separator" },
         { label: "＋ Zoom In", action: "zoom-in", accelerator: "CommandOrControl+=" },
         { label: "－ Zoom Out", action: "zoom-out", accelerator: "CommandOrControl+-" }
       ]
@@ -934,6 +936,13 @@ function installMenuHandlers(): void {
 
     if (action === "zoom-out") {
       updateZoomForAllWindows(-ZOOM_STEP);
+      return;
+    }
+
+    if (action === "toggle-sidebar") {
+      for (const ctx of windows) {
+        ctx.window.webview.rpc?.send.toggleSidebar({});
+      }
       return;
     }
 

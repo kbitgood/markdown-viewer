@@ -38,6 +38,7 @@ export type MainViewerRPC = {
       warning: { message: string };
       configUpdated: { config: ViewerConfig };
       manualRefreshStart: {};
+      toggleSidebar: {};
     };
   }>;
 };

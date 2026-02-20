@@ -43,6 +43,9 @@ const rpc = Electroview.defineRPC<MainViewerRPC>({
         setTimeout(() => {
           elements.mainPanel.classList.remove("manual-refresh");
         }, 220);
+      },
+      toggleSidebar: () => {
+        elements.outlinePanel.classList.toggle("collapsed");
       }
     }
   }
