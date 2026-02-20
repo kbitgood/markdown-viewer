@@ -123,12 +123,15 @@ h1 {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  display: flex;
   min-height: 0;
+  width: 100%;
 }
 
 .outline-panel {
+  width: 280px;
+  min-width: 280px;
+  flex: 0 0 280px;
   border-right: 1px solid var(--line);
   padding: 1rem;
   overflow: auto;
@@ -161,6 +164,7 @@ h1 {
 }
 
 .main-panel {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: auto;
   padding: 1rem clamp(1rem, 3vw, 2rem) 2rem;
@@ -239,6 +243,7 @@ input[type="number"] {
   padding: clamp(1rem, 2.5vw, 2.5rem);
   line-height: 1.6;
   overflow-wrap: anywhere;
+  min-height: 62vh;
 }
 
 .preview h1,
@@ -300,10 +305,13 @@ input[type="number"] {
 
 @media (max-width: 980px) {
   .workspace {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .outline-panel {
+    width: 100%;
+    min-width: 0;
+    flex: none;
     border-right: 0;
     border-bottom: 1px solid var(--line);
     max-height: 28vh;
